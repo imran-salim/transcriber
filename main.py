@@ -164,7 +164,7 @@ async def recording_websocket(websocket: WebSocket):
                     try:
                         with open(session.filename, 'rb') as audio_file:
                             transcription = client.audio.transcriptions.create(
-                                model='whisper-1',
+                                model='gpt-4o-mini-transcribe',
                                 file=audio_file,
                                 response_format='text'
                             )
