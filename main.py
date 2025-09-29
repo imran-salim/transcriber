@@ -19,7 +19,7 @@ client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
 recording_sessions = {}
 
 class RecordingSession:
-    def __init__(self, session_id, format, channels, rate, chunk, filename):
+    def __init__(self, session_id: str, format: int, channels: int, rate: int, chunk: int, filename: str):
         self.session_id = session_id
         self.audio = PyAudio()
         self.stream = self.audio.open(format=format,
@@ -80,6 +80,40 @@ async def start_recording():
     return { 'session_id': session_id, 'status': 'recording_started' }
 
 
+async def transcribe_audio(filename: str, session_id: str) -> str:
+    """Transcribe audio file and save transcription."""
+    print(f'Transcribing audio in {filename}')
+    
+    try:
+        with open(filename, 'rb') as audio_file:
+            transcription = client.audio.transcriptions.create(
+                model='gpt-4o-mini-transcribe',
+                file=audio_file,
+                response_format='text'
+            )
+
+        transcribed_text = transcription
+        transcription_file = f'transcription_{session_id}.txt'
+        
+        with open(transcription_file, 'w', encoding='utf-8') as f:
+            f.write(transcribed_text)
+
+        print(f'Transcription saved to: {transcription_file}')
+        print('\nTranscribed Text:')
+        print(transcribed_text)
+        
+        return transcribed_text
+        
+    except APIError as e:
+        error_msg = f'An OpenAI API error occurred: {e}'
+        print(error_msg)
+        raise Exception(error_msg)
+    except Exception as e:
+        error_msg = f'An unexpected error occurred: {e}'
+        print(error_msg)
+        raise Exception(error_msg)
+
+
 @app.post('/record/stop/{session_id}')
 async def stop_recording(session_id: str):
     if session_id not in recording_sessions:
@@ -90,31 +124,21 @@ async def stop_recording(session_id: str):
     filename = session.filename
     del recording_sessions[session_id]
 
-    print(f'Transcribing audio in {filename}')
-
     try:
-        with open(filename, 'rb') as audio_file:
-            transcription = client.audio.transcriptions.create(
-                model='gpt-4o-mini-transcribe',
-                file=audio_file,
-                response_format='text'
-            )
-
-        transcribed_text = transcription
-
-        with open(f'transcription_{session_id}', 'w', encoding='utf-8') as f:
-            f.write(transcribed_text)
-
-        print(f'Transcription saved to: transcription_{session_id}')
-        print('\nTranscribed Text:')
-        print(transcribed_text)
-        
-    except APIError as e:
-        print(f'An OpenAI API error occurred: {e}')
+        transcribed_text = await transcribe_audio(filename, session_id)
+        return {
+            'session_id': session_id, 
+            'status': 'recording_stopped', 
+            'file': filename,
+            'transcription': transcribed_text
+        }
     except Exception as e:
-        print(f'An unexpected error occurred: {e}')
-    
-    return {'session_id': session_id, 'status': 'recording_stopped', 'file': filename}
+        return {
+            'session_id': session_id,
+            'status': 'recording_stopped',
+            'file': filename,
+            'transcription_error': str(e)
+        }
 
 
 @app.get('/record/status/{session_id}')
@@ -162,20 +186,8 @@ async def recording_websocket(websocket: WebSocket):
                     await websocket.send_text('🔄 Starting transcription...')
                     
                     try:
-                        with open(session.filename, 'rb') as audio_file:
-                            transcription = client.audio.transcriptions.create(
-                                model='gpt-4o-mini-transcribe',
-                                file=audio_file,
-                                response_format='text'
-                            )
-                        
-                        transcribed_text = transcription
-                        transcription_file = f'transcription_{session.session_id}.txt'
-                        
-                        with open(transcription_file, 'w', encoding='utf-8') as f:
-                            f.write(transcribed_text)
-                        
-                        await websocket.send_text(f'✅ Transcription complete: {transcription_file}')
+                        transcribed_text = await transcribe_audio(session.filename, session.session_id)
+                        await websocket.send_text(f'✅ Transcription complete: transcription_{session.session_id}.txt')
                         await websocket.send_text(f'📝 Text: {transcribed_text}')
                         
                     except Exception as e:
