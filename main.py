@@ -105,13 +105,14 @@ async def transcribe_audio(filename: str, session_id: str) -> str:
         return transcribed_text
         
     except APIError as e:
-        error_msg: str = f'An OpenAI API error occurred: {e}'
-        print(error_msg)
-        raise Exception(error_msg)
+        print(f'OpenAI API error: {e}')
+        raise  # Re-raise the original APIError
+    except FileNotFoundError as e:
+        print(f'Audio file not found: {e}')
+        raise
     except Exception as e:
-        error_msg: str = f'An unexpected error occurred: {e}'
-        print(error_msg)
-        raise Exception(error_msg)
+        print(f'Unexpected transcription error: {e}')
+        raise
 
 
 @app.post('/record/stop/{session_id}')
