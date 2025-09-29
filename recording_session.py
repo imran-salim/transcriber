@@ -20,7 +20,7 @@ class RecordingSession:
     def _record(self) -> None:
         while self.recording:
             try:
-                data: bytes = self.stream.read(1024, exception_on_overflow=False)
+                data: bytes = self.stream.read(self.chunk, exception_on_overflow=False)
                 self.frames.append(data)
             except Exception as e:
                 print(f'Recording error: {e}')
@@ -35,9 +35,9 @@ class RecordingSession:
         self.thread.join()
 
         wf: wave.Wave_write = wave.open(self.filename, 'wb')
-        wf.setnchannels(1)
+        wf.setnchannels(self.channels)
         wf.setsampwidth(self.audio.get_sample_size(paInt16))
-        wf.setframerate(44100)
+        wf.setframerate(self.rate)
         wf.writeframes(b''.join(self.frames))
         wf.close()
 
