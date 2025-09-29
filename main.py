@@ -6,50 +6,50 @@ from threading import Thread
 import uuid
 from openai import OpenAI, APIError
 
-from typing import Union
+from typing import Union, Dict, Optional
 
 from fastapi import FastAPI, WebSocket
 
 load_dotenv()
 
-app = FastAPI()
+app: FastAPI = FastAPI()
 
-client = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
+client: OpenAI = OpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
 
-recording_sessions = {}
+recording_sessions: Dict[str, 'RecordingSession'] = {}
 
 class RecordingSession:
-    def __init__(self, session_id, format, channels, rate, chunk, filename):
-        self.session_id = session_id
-        self.audio = PyAudio()
+    def __init__(self, session_id: str, format: int, channels: int, rate: int, chunk: int, filename: str) -> None:
+        self.session_id: str = session_id
+        self.audio: PyAudio = PyAudio()
         self.stream = self.audio.open(format=format,
                                       channels=channels,
                                       rate=rate,
                                       input=True,
                                       frames_per_buffer=chunk)
-        self.frames = []
-        self.recording = True
-        self.filename = filename
-        self.thread = Thread(target=self._record)
+        self.frames: list[bytes] = []
+        self.recording: bool = True
+        self.filename: str = filename
+        self.thread: Thread = Thread(target=self._record)
 
-    def _record(self):
+    def _record(self) -> None:
         while self.recording:
             try:
-                data = self.stream.read(1024, exception_on_overflow=False)
+                data: bytes = self.stream.read(1024, exception_on_overflow=False)
                 self.frames.append(data)
             except Exception as e:
                 print(f'Recording error: {e}')
                 break
 
-    def start(self):
+    def start(self) -> None:
         self.thread.start()
         print(f'Started recording session {self.session_id}')
 
-    def stop(self):
+    def stop(self) -> None:
         self.recording = False
         self.thread.join()
 
-        wf = wave.open(self.filename, 'wb')
+        wf: wave.Wave_write = wave.open(self.filename, 'wb')
         wf.setnchannels(1)
         wf.setsampwidth(self.audio.get_sample_size(paInt16))
         wf.setframerate(44100)
@@ -64,34 +64,26 @@ class RecordingSession:
 
 
 @app.get('/')
-def home():
+def home() -> Dict[str, str]:
     return { 'Prototype': 'Transcriber' }
 
 
 @app.post('/record/start')
-async def start_recording():
-    session_id = str(uuid.uuid4())
-    filename = f'recording_{session_id}.wav'
+async def start_recording() -> Dict[str, str]:
+    session_id: str = str(uuid.uuid4())
+    filename: str = f'recording_{session_id}.wav'
 
-    session = RecordingSession(session_id, paInt16, 1, 44100, 1024, filename)
+    session: RecordingSession = RecordingSession(session_id, paInt16, 1, 44100, 1024, filename)
     recording_sessions[session_id] = session
     session.start()
 
     return { 'session_id': session_id, 'status': 'recording_started' }
 
 
-@app.post('/record/stop/{session_id}')
-async def stop_recording(session_id: str):
-    if session_id not in recording_sessions:
-        return {'error': 'Session not found'}
-    
-    session = recording_sessions[session_id]
-    session.stop()
-    filename = session.filename
-    del recording_sessions[session_id]
-
+async def transcribe_audio(filename: str, session_id: str) -> str:
+    """Transcribe audio file and save transcription."""
     print(f'Transcribing audio in {filename}')
-
+    
     try:
         with open(filename, 'rb') as audio_file:
             transcription = client.audio.transcriptions.create(
@@ -100,49 +92,82 @@ async def stop_recording(session_id: str):
                 response_format='text'
             )
 
-        transcribed_text = transcription
-
-        with open(f'transcription_{session_id}', 'w', encoding='utf-8') as f:
+        transcribed_text: str = transcription
+        transcription_file: str = f'transcription_{session_id}.txt'
+        
+        with open(transcription_file, 'w', encoding='utf-8') as f:
             f.write(transcribed_text)
 
-        print(f'Transcription saved to: transcription_{session_id}')
+        print(f'Transcription saved to: {transcription_file}')
         print('\nTranscribed Text:')
         print(transcribed_text)
         
+        return transcribed_text
+        
     except APIError as e:
-        print(f'An OpenAI API error occurred: {e}')
+        print(f'OpenAI API error: {e}')
+        raise  # Re-raise the original APIError
+    except FileNotFoundError as e:
+        print(f'Audio file not found: {e}')
+        raise
     except Exception as e:
-        print(f'An unexpected error occurred: {e}')
-    
-    return {'session_id': session_id, 'status': 'recording_stopped', 'file': filename}
+        print(f'Unexpected transcription error: {e}')
+        raise
 
 
-@app.get('/record/status/{session_id}')
-async def recording_status(session_id: str):
+@app.post('/record/stop/{session_id}')
+async def stop_recording(session_id: str) -> Dict[str, Union[str, Dict[str, str]]]:
     if session_id not in recording_sessions:
         return {'error': 'Session not found'}
     
-    session = recording_sessions[session_id]
+    session: RecordingSession = recording_sessions[session_id]
+    session.stop()
+    filename: str = session.filename
+    del recording_sessions[session_id]
+
+    try:
+        transcribed_text: str = await transcribe_audio(filename, session_id)
+        return {
+            'session_id': session_id, 
+            'status': 'recording_stopped', 
+            'file': filename,
+            'transcription': transcribed_text
+        }
+    except Exception as e:
+        return {
+            'session_id': session_id,
+            'status': 'recording_stopped',
+            'file': filename,
+            'transcription_error': str(e)
+        }
+
+
+@app.get('/record/status/{session_id}')
+async def recording_status(session_id: str) -> Dict[str, Union[str, bool, int]]:
+    if session_id not in recording_sessions:
+        return {'error': 'Session not found'}
+    
+    session: RecordingSession = recording_sessions[session_id]
     return {'session_id': session_id, 'recording': session.recording, 'frames_recorded': len(session.frames)}
 
 
 @app.websocket('/record/ws')
-async def recording_websocket(websocket: WebSocket):
+async def recording_websocket(websocket: WebSocket) -> None:
     await websocket.accept()
-    session = None
+    session: Optional[RecordingSession] = None
     
     await websocket.send_text('Connected! Commands: start, stop, status, help')
     
     try:
         while True:
-            message = await websocket.receive_text()
+            message: str = await websocket.receive_text()
             message = message.strip().lower()
             print(f'Received WebSocket message: {message}')
             
             if message == 'start' and session is None:
                 try:
-                    session_id = str(uuid.uuid4())
-                    filename = f'recording_{session_id}.wav'
+                    session_id: str = str(uuid.uuid4())
+                    filename: str = f'recording_{session_id}.wav'
                     session = RecordingSession(session_id, paInt16, 1, 44100, 1024, filename)
                     session.start()
                     await websocket.send_text(f'🎤 Recording started: {session_id}')
@@ -162,20 +187,8 @@ async def recording_websocket(websocket: WebSocket):
                     await websocket.send_text('🔄 Starting transcription...')
                     
                     try:
-                        with open(session.filename, 'rb') as audio_file:
-                            transcription = client.audio.transcriptions.create(
-                                model='gpt-4o-mini-transcribe',
-                                file=audio_file,
-                                response_format='text'
-                            )
-                        
-                        transcribed_text = transcription
-                        transcription_file = f'transcription_{session.session_id}.txt'
-                        
-                        with open(transcription_file, 'w', encoding='utf-8') as f:
-                            f.write(transcribed_text)
-                        
-                        await websocket.send_text(f'✅ Transcription complete: {transcription_file}')
+                        transcribed_text: str = await transcribe_audio(session.filename, session.session_id)
+                        await websocket.send_text(f'✅ Transcription complete: transcription_{session.session_id}.txt')
                         await websocket.send_text(f'📝 Text: {transcribed_text}')
                         
                     except Exception as e:
@@ -191,13 +204,13 @@ async def recording_websocket(websocket: WebSocket):
                 
             elif message == 'status':
                 if session:
-                    duration = len(session.frames) * 1024 / 44100
+                    duration: float = len(session.frames) * 1024 / 44100
                     await websocket.send_text(f'📊 Recording active | Session: {session.session_id} | Frames: {len(session.frames)} | Duration: ~{duration:.1f}s')
                 else:
                     await websocket.send_text('💤 No active recording')
       
             elif message == 'help':
-                help_text = """
+                help_text: str = """
                     📋 Available commands:
                     • start  - Begin recording
                     • stop   - End recording and save
