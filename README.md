@@ -1,19 +1,13 @@
 # Transcriber
 
-Minimal real-time audio recording + transcription API using FastAPI, PyAudio and OpenAI.
+Real-time audio recording and transcription using FastAPI, PyAudio, and OpenAI.
 
-## Features
-- Start / stop microphone capture
-- WAV file output + text transcription
-- REST + WebSocket control
-- Simple session status
-
-## Install
+## Setup
 ```bash
 git clone https://github.com/imran-salim/transcriber.git
 cd transcriber
 python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
+source .venv/bin/activate
 pip install -r requirements.txt
 echo 'OPENAI_API_KEY=your_key' > .env
 ```
@@ -21,39 +15,33 @@ echo 'OPENAI_API_KEY=your_key' > .env
 ## Run
 ```bash
 fastapi dev main.py
-# Docs: http://localhost:8000/docs
+# http://localhost:8000/docs
 ```
 
-## REST API
-```text
-POST /record/start          -> { session_id, status }
-POST /record/stop/{id}      -> { session_id, status, file }
-GET  /record/status/{id}    -> { session_id, recording, frames_recorded }
-WS   /record/ws             -> commands: start | stop | status | help | quit
+## API
+```
+POST /record/start          # Start recording
+POST /record/stop/{id}      # Stop & transcribe  
+GET  /record/status/{id}    # Check status
+WS   /record/ws             # WebSocket interface
 ```
 
-## Quick Usage
+## Usage
 ```bash
+# REST
 curl -X POST http://localhost:8000/record/start
-curl http://localhost:8000/record/status/{session_id}
 curl -X POST http://localhost:8000/record/stop/{session_id}
-```
 
-## WebSocket
-```bash
+# WebSocket
 websocat ws://localhost:8000/record/ws
 > start
-> status
 > stop
+> quit
 ```
 
-## Notes
-- Audio: 16-bit PCM mono 44.1kHz
-- Output: recording_<id>.wav + transcription_<id>
-- Model: gpt-4o-mini-transcribe (configure in code if needed)
+## Output
+- Audio: `recording_{id}.wav`
+- Text: `transcription_{id}.txt`
 
 ## License
 MIT
-
----
-Built for quick experimentation.
