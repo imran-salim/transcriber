@@ -1,0 +1,5 @@
+fastapi
+uvicorn
+pyaudio
+openai
+python-dotenv
