@@ -27,7 +27,7 @@ class WebSocketHandler:
         elif message == "status":
             await self.send_status()
         elif message == "help":
-            pass
+            await self.send_help()
         elif message == "quit":
             await self.websocket.send_text("👋 Goodbye!")
         else:
@@ -83,14 +83,9 @@ class WebSocketHandler:
             await self.websocket.send_text("💤 No active recording")
 
     async def send_help(self):
-        help_text: str = """
-            help_text: str = '''
-                    📋 Available commands:
-                    • start  - Begin recording
-                    • stop   - End recording and save
-                    • status - Check recording status
-                    • help   - Show this message
-                    • quit   - Close connection
-                '''
-        """
-        await self.websocket.send_text(help_text)
+        await self.websocket.send_text('📋 Available commands:')
+        await self.websocket.send_text('• start  - Begin recording')
+        await self.websocket.send_text('• stop   - End recording and save')
+        await self.websocket.send_text('• status - Check recording status')
+        await self.websocket.send_text('• help   - Show this message')
+        await self.websocket.send_text('• quit   - Close connection')
