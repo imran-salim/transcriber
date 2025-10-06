@@ -2,8 +2,8 @@ import uuid
 from typing import Optional
 
 from fastapi import WebSocket
-from pyaudio import paInt16
 
+import config
 from recording_session import RecordingSession
 
 
@@ -40,7 +40,12 @@ class WebSocketHandler:
             session_id: str = str(uuid.uuid4())
             filename: str = f"recording_{session_id}.wav"
             self.session = RecordingSession(
-                session_id, paInt16, 1, 44100, 1024, filename
+                session_id,
+                config.AUDIO_FORMAT_MAP[config.FORMAT],
+                config.CHANNELS,
+                config.RATE,
+                config.CHUNK,
+                filename,
             )
             self.session.start()
             await self.websocket.send_text(f"🎤 Recording started: {session_id}")

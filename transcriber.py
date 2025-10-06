@@ -3,6 +3,8 @@ import os
 from dotenv import load_dotenv
 from openai import APIError, OpenAI
 
+import config
+
 load_dotenv()
 
 
@@ -16,7 +18,7 @@ async def transcribe_audio(filename: str, session_id: str) -> str:
     try:
         with open(filename, "rb") as audio_file:
             transcription = client.audio.transcriptions.create(
-                model="gpt-4o-mini-transcribe", file=audio_file, response_format="text"
+                model=config.MODEL, file=audio_file, response_format="text"
             )
 
         transcribed_text: str = transcription
