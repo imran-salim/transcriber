@@ -2,12 +2,9 @@ import uuid
 from typing import Optional
 
 from fastapi import WebSocket
-from pyaudio import paInt16
 
 import config
 from recording_session import RecordingSession
-
-AUDIO_FORMAT_MAP = {"paInt16": paInt16}
 
 
 class WebSocketHandler:
@@ -44,7 +41,7 @@ class WebSocketHandler:
             filename: str = f"recording_{session_id}.wav"
             self.session = RecordingSession(
                 session_id,
-                AUDIO_FORMAT_MAP[config.FORMAT],
+                config.AUDIO_FORMAT_MAP[config.FORMAT],
                 config.CHANNELS,
                 config.RATE,
                 config.CHUNK,

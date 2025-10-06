@@ -2,7 +2,6 @@ import uuid
 from typing import Dict, Union
 
 from fastapi import FastAPI, WebSocket
-from pyaudio import paInt16
 
 import config
 from recording_session import RecordingSession
@@ -11,8 +10,6 @@ from websocket_handler import WebSocketHandler
 app: FastAPI = FastAPI()
 
 recording_sessions: Dict[str, RecordingSession] = {}
-
-AUDIO_FORMAT_MAP = {"paInt16": paInt16}
 
 
 @app.get("/")
@@ -27,7 +24,7 @@ async def start_recording() -> Dict[str, str]:
 
     session: RecordingSession = RecordingSession(
         session_id,
-        AUDIO_FORMAT_MAP[config.FORMAT],
+        config.AUDIO_FORMAT_MAP[config.FORMAT],
         config.CHANNELS,
         config.RATE,
         config.CHUNK,
